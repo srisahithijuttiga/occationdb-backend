@@ -28,7 +28,6 @@ const saveData = (data) => {
 
 // 🔹 GET all persons
 app.get("/api/persons", (req, res) => {
-  debugger;
   const data = loadData();
   res.json(data.persons || []);
 });
@@ -159,6 +158,50 @@ app.post("/api/persons/:id/voice", (req, res) => {
     res.status(404).json({ message: "Person not found" });
   }
 });
+// 🔹 DELETE - Remove image from gallery by index
+app.delete("/api/persons/:id/gallery/:index", (req, res) => {
+  const { id, index } = req.params;
+  const data = loadData();
+  const person = data.persons.find((p) => p.id === id);
+
+  if (!person || !person.gallery || !person.gallery[+index]) {
+    return res.status(404).json({ message: "Image not found." });
+  }
+
+  person.gallery.splice(+index, 1);
+  saveData(data);
+  res.json({ success: true, message: "Image deleted." });
+});
+
+// 🔹 DELETE - Remove video by index
+app.delete("/api/persons/:id/videos/:index", (req, res) => {
+  const { id, index } = req.params;
+  const data = loadData();
+  const person = data.persons.find((p) => p.id === id);
+
+  if (!person || !person.videos || !person.videos[+index]) {
+    return res.status(404).json({ message: "Video not found." });
+  }
+
+  person.videos.splice(+index, 1);
+  saveData(data);
+  res.json({ success: true, message: "Video deleted." });
+});
+
+// 🔹 DELETE - Remove voice recording
+app.delete("/api/persons/:id/voice", (req, res) => {
+  const { id } = req.params;
+  const data = loadData();
+  const person = data.persons.find((p) => p.id === id);
+
+  if (!person || !person.voice) {
+    return res.status(404).json({ message: "Voice not found." });
+  }
+
+  person.voice = null;
+  saveData(data);
+  res.json({ success: true, message: "Voice deleted." });
+});
 
 // ---------------------- REVIEW ROUTES ----------------------
 
@@ -171,60 +214,83 @@ app.post("/api/reviews", (req, res) => {
   }
 
   const data = loadData();
-  const newReview = { username, message };
+  const newReview = {
+    id: Date.now(), // unique ID
+    username,
+    message
+  };
+
+  data.reviews = data.reviews || [];
   data.reviews.push(newReview);
   saveData(data);
 
   res.json({ success: true, review: newReview });
 });
-// 🔹 PUT - Edit review by index
-app.put("/api/reviews/:index", (req, res) => {
-  const { index } = req.params;
-  const { username, message } = req.body;
-  const data = loadData();
 
-  if (!data.reviews || !data.reviews[index]) {
+// 🔹 PUT - Edit review by ID
+app.put("/api/reviews/:id", (req, res) => {
+  const { id } = req.params;
+  const { username, message } = req.body;
+
+  const data = loadData();
+  const reviewIndex = data.reviews.findIndex(r => r.id == id);
+
+  if (reviewIndex === -1) {
     return res.status(404).json({ message: "Review not found." });
   }
 
-  data.reviews[index] = { username, message };
+  data.reviews[reviewIndex] = {
+    ...data.reviews[reviewIndex],
+    username,
+    message
+  };
+
   saveData(data);
   res.json({ success: true, message: "Review updated successfully." });
 });
 
-// 🔹 DELETE - Delete review by index
-app.delete("/api/reviews/:index", (req, res) => {
-  const { index } = req.params;
+// 🔹 DELETE - Delete review by ID
+app.delete("/api/reviews/:id", (req, res) => {
+  const { id } = req.params;
   const data = loadData();
 
-  if (!data.reviews || !data.reviews[index]) {
+  const reviewIndex = data.reviews.findIndex(r => r.id == id);
+  if (reviewIndex === -1) {
     return res.status(404).json({ message: "Review not found." });
   }
 
-  const deleted = data.reviews.splice(index, 1);
+  const deleted = data.reviews.splice(reviewIndex, 1);
   saveData(data);
   res.json({ success: true, message: "Review deleted successfully.", deleted });
 });
 
-// 🔹 GET all reviews (optional fallback)
+// 🔹 GET all reviews
 app.get("/api/reviews", (req, res) => {
   const data = loadData();
   res.json(data.reviews || []);
 });
 
-// 🔹 GET reviews by username
 app.get("/api/reviews/:username", (req, res) => {
   const data = loadData();
-  const userReviews = data.reviews?.filter(
-    (review) => review.username.toLowerCase() === req.params.username.toLowerCase()
-  );
+  const username = req.params.username.toLowerCase();
 
-  if (userReviews && userReviews.length > 0) {
-    res.json(userReviews);
-  } else {
-    res.status(404).json({ message: "No reviews found for this username" });
+  try {
+    const userReviews = (data.reviews || [])
+      .filter((review) => review.username && typeof review.username === 'string')
+      .map((review, index) => ({ ...review, index }))
+      .filter((review) => review.username.toLowerCase() === username);
+
+    if (userReviews.length > 0) {
+      res.json(userReviews);
+    } else {
+      res.status(404).json({ message: "No reviews found for this username" });
+    }
+  } catch (err) {
+    console.error("Error while fetching reviews:", err);
+    res.status(500).json({ message: "Internal server error." });
   }
 });
+
 
 // 🔹 Root health check
 app.get("/", (req, res) => {
